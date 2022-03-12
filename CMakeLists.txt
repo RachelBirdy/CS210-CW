@@ -9,4 +9,4 @@ set(CMAKE_C_STANDARD 11)
 pico_sdk_init()
 
 # Add qmc subdirectory
-add_subdirectory(qmc5883l_i2c)
+add_subdirectory(gy9250_i2c)

@@ -11,171 +11,221 @@
 #include "hardware/i2c.h"
 #include <math.h>
 
-/*
+const uint8_t REG_GY_XOFFS = 19;
+const uint8_t REG_GY_YOFFS = 21;
+const uint8_t REG_GY_ZOFFS = 23;
 
-*/
+const uint8_t REG_SAMPLE_RATE_DIV = 25;
 
-const int X_MAX = 4280;
-const int X_MIN = 3887;
+const uint8_t REG_CONFIG = 26;
+const uint8_t REG_GYRO_CONFIG = 27;
+const uint8_t REG_ACCEL_CONFIG = 28;
+const uint8_t REG_ACCEL_CONFIG_2 = 29;
+const uint8_t REG_ACCEL_LP_ODR = 30;
+const uint8_t REG_WAKE_ON_MOTION = 31;
+const uint8_t REG_FIFO_ENABLE = 35;
 
-const int Y_MAX = 4275;
-const int Y_MIN = 3985;
+// Reg 36 to 42 aren't important. They are for when the
+// GY-9250 is acting as an i2c master for addition sensors
+const uint8_t REG_I2C_MASTER = 36;
+const uint8_t REG_I2C_SLV0_DEVADDR = 37;
+const uint8_t REG_I2C_SLV0_REGADDR = 38;
+const uint8_t REG_I2C_SLV0_CTRL = 39;
+const uint8_t REG_I2C_SLV1_DEVADDR = 40;
+const uint8_t REG_I2C_SLV1_REGADDR = 41;
+const uint8_t REG_I2C_SLV1_CTRL = 42;
 
-double X_SCALE_FACTOR = 1;
-double Y_SCALE_FACTOR = 1;//1.397468;
-double Z_SCALE_FACTOR = 1;//0.780764;
+const uint8_t REG_I2C_SLV4_ADDR = 49;
+const uint8_t REG_I2C_SLV4_REG = 50;
+const uint8_t REG_I2C_SLV4_DO = 51;
+const uint8_t REG_I2C_SLV4_CTRL = 52;
+const uint8_t REG_I2C_SLV4_DI = 53;
+const uint8_t REG_I2C_MST_STAT = 54;
 
-int X_OFFSET = 0;//-3828;
-int Y_OFFSET = 0;//-4125;
-int Z_OFFSET = 0;//-3263;;
+const uint8_t REG_INT_CONFIG = 55;
+const uint8_t REG_INT_ENABLE = 56;
+const uint8_t REG_INT_STATUS = 58;
+
+// Accelerometer Measurements
+const uint8_t REG_ACCEL_X_H = 59;
+const uint8_t REG_ACCEL_X_L = 60;
+const uint8_t REG_ACCEL_Y_H = 61;
+const uint8_t REG_ACCEL_Y_L = 62;
+const uint8_t REG_ACCEL_Z_H = 63;
+const uint8_t REG_ACCEL_Z_L = 64;
+
+// Temperature Measurements
+const uint8_t REG_TEMP_H = 65;
+const uint8_t REG_TEMP_L = 66;
+
+// Gyroscope Measurements
+const uint8_t REG_GYRO_X_H = 67;
+const uint8_t REG_GYRO_X_L = 68;
+const uint8_t REG_GYRO_Y_H = 69;
+const uint8_t REG_GYRO_Y_L = 70;
+const uint8_t REG_GYRO_Z_H = 71;
+const uint8_t REG_GYRO_Z_L = 72;
+
+// Registers 73-96 store data from external i2c devices - we dont need this
+
+// Registers 99-103 are more i2c master stuff
+
+// Reset
+const uint8_t REG_SIG_PATH_RESET = 104;
+
+const uint8_t REG_ACCEL_INT_CTL = 105;
+const uint8_t REG_USER_CTL = 106;
+
+// Power management registers
+const uint8_t REG_PWR_MGMT_1 = 107;
+const uint8_t REG_PWR_MGMT_2 = 108;
 
 const int SDA_PIN = 0;
 const int SCL_PIN = 1;
+const int MAG_SDA_PIN = 2;
+const int MAG_SCL_PIN = 3;
 
-// The default QMC5883L address is 0x0d
-static uint8_t ADDRESS = 0x0D;
+// The default GY-9250 address is 0x0d
+const uint8_t ADDRESS = 0x68;
+const uint8_t MAG_ADDRESS = 0x0C;
 
-static uint8_t CONTROL_REG_1 = 0x09;
-static uint8_t CONTROL_REG_2 = 0x0A;
-static uint8_t SET_RST_REG = 0x0B;
+const uint8_t MAG_REG_STAT_1 = 2;
+const uint8_t MAG_REG_STAT_2 = 9;
+const uint8_t MAG_REG_X_L = 3;
+const uint8_t MAG_REG_X_H = 4;
+const uint8_t MAG_REG_Y_L = 5;
+const uint8_t MAG_REG_Y_H = 6;
+const uint8_t MAG_REG_Z_L = 7;
+const uint8_t MAG_REG_Z_H = 8;
+const uint8_t MAG_REG_CTRL = 0x0A;
+const uint8_t MAG_REG_X_SENS = 0x10;
+const uint8_t MAG_REG_Y_SENS = 0x11;
+const uint8_t MAG_REG_Z_SENS = 0x12;
 
-// Output data is 16 bit integers in two's compliment, spread
-// across two registers.
-const uint8_t X_LSB_REG = 0x00;
-const uint8_t X_MSB_REG = 0x01;
-const uint8_t Y_LSB_REG = 0x02;
-const uint8_t Y_MSB_REG = 0x03;
-const uint8_t Z_LSB_REG = 0x04;
-const uint8_t Z_MSB_REG = 0x05;
+const uint8_t REG_WHO_AM_I = 117;
 
-const uint8_t STATUS_REG = 0x06;
-
-const uint8_t TOUT_LSB = 0x07;
-const uint8_t TOUT_MSB = 0x08;
-
-// Control register 1 values. Compose the desired byte with
-// bitwise OR. Addition will also work, but is less tollerant
-// of mistakes.
-const uint8_t MODE_CONTINUOUS = 0x01;
-const uint8_t MODE_STANDBY = 0x00;
-const uint8_t ODR_10HZ = 0x00;
-const uint8_t ODR_50HZ = 0x04;
-const uint8_t ODR_100HZ = 0x08;
-const uint8_t ODR_200HZ = 0x0C;
-const uint8_t RNG_2G = 0x00;
-const uint8_t RNG_8G = 0x10;
-const uint8_t OSR_512 = 0x00;
-const uint8_t OSR_256 = 0x40;
-const uint8_t OSR_128 = 0x80;
-const uint8_t OSR_64 = 0xC0;
-
-// Control register 2 values
-const uint8_t INT_ENB_TRUE = 0x00;
-const uint8_t INT_ENB_FALSE = 0x01;
-const uint8_t ROL_PNT_TRUE = 0x40;
-const uint8_t ROL_PNT_FALSE = 0x00;
-const uint8_t SOFT_RST = 0x80;
-
-void qmc5883l_init() {
-    uint8_t buffer[] = {CONTROL_REG_1, (MODE_CONTINUOUS | ODR_50HZ | RNG_2G | OSR_512)};
-    i2c_write_blocking(i2c0, ADDRESS, buffer, 2, false);
-
-    buffer[0] = CONTROL_REG_2;
-    buffer[1] = INT_ENB_TRUE;
-    i2c_write_blocking(i2c0, ADDRESS, buffer, 2, false);
+/**
+ * Read data from a register.
+ */
+void read_register_raw(uint8_t registerAddress, int8_t *outputBuffer, int outputLength) {
+    i2c_write_blocking(i2c0, ADDRESS, &registerAddress, 1, true);
+    i2c_read_blocking(i2c0, ADDRESS, outputBuffer, outputLength, false);
     return;
 }
 
-/*
- * Read the current values of the magnetometer
- * @return - An 16 bit array of the X, Y, and Z values
+/**
+ * Write data to a register
  */
-int16_t *read() {
-    int16_t *output = malloc(sizeof(int16_t) * 3);
-    uint8_t *rawBuffer = calloc(6, sizeof(uint8_t));
-    i2c_write_blocking(i2c0, ADDRESS, &X_LSB_REG, 1, true);
-    i2c_read_blocking(i2c0, ADDRESS, rawBuffer, 6, false);
+void write_register_raw(uint8_t registerAddress, int8_t *writeData, int writeLength) {
+    int8_t *writeBuffer = calloc(writeLength + 1, sizeof(int8_t));
+    writeBuffer[0] = registerAddress;
+    for (int i = 0; i < writeLength; i++) {
+        writeBuffer[i + 1] = writeData[i];
+    }
+    i2c_write_blocking(i2c0, ADDRESS, writeData, writeLength + 1, false);
+}
 
-    output[0] = (rawBuffer[1] << 8) | rawBuffer[0];
-    output[1] = (rawBuffer[3] << 8) | rawBuffer[2];
-    output[2] = (rawBuffer[5] << 8) | rawBuffer[4];
+/**
+ * Read data from a register.
+ */
+void read_mag_raw(uint8_t registerAddress, int8_t *outputBuffer, int outputLength) {
+    i2c_write_blocking(i2c1, MAG_ADDRESS, &registerAddress, 1, true);
+    i2c_read_blocking(i2c1, MAG_ADDRESS, outputBuffer, outputLength, false);
+    return;
+}
 
+/**
+ * Write data to a register
+ */
+void write_mag_raw(uint8_t registerAddress, int8_t *writeData, int writeLength) {
+    int8_t *writeBuffer = calloc(writeLength + 1, sizeof(int8_t));
+    writeBuffer[0] = registerAddress;
+    for (int i = 0; i < writeLength; i++) {
+        writeBuffer[i + 1] = writeData[i];
+    }
+    i2c_write_blocking(i2c1, MAG_ADDRESS, writeData, writeLength + 1, false);
+}
+
+void gy9250_init() {
+
+    return;
+}
+
+/**
+ * Read the accelerometer output
+ * @return: An array of the X, Y and Z readings
+ */
+int16_t *read_accel() {
+    int16_t *output = calloc(3, sizeof(int16_t));
+    int8_t *lowByte = calloc(1, sizeof(int8_t));
+    int8_t *highByte = calloc(1, sizeof(int8_t));
+    read_register_raw(REG_ACCEL_X_H, highByte, 1);
+    read_register_raw(REG_ACCEL_X_L, lowByte, 1);
+    output[0] = (*highByte << 8) & *lowByte;
+    read_register_raw(REG_ACCEL_Y_H, highByte, 1);
+    read_register_raw(REG_ACCEL_Y_L, lowByte, 1);
+    output[1] = (*highByte << 8) & *lowByte;
+    read_register_raw(REG_ACCEL_Z_H, highByte, 1);
+    read_register_raw(REG_ACCEL_Z_L, lowByte, 1);
+    output[2] = (*highByte << 8) & *lowByte;
     return output;
 }
 
-void calculateHeading(int* headingOut, double y, double x) {
-    double heading = atan2(y, x);
-    if (heading < 0) {
-        heading += 2 * M_PI;
-    } else if (heading > 2 * M_PI) {
-        heading -= 2 * M_PI;
-    }
-    heading *= (double)180/M_PI;
-    headingOut[0] = (int) floor(heading);
-    headingOut[1] = (int) round((heading - headingOut[0]) * 60);
-    return;
+/**
+ * Read the gyroscope output
+ * @return: An array of the X, Y and Z readings
+ */
+int16_t *read_gyro() {
+    int16_t *output = calloc(3, sizeof(int16_t));
+    int8_t *lowByte = calloc(1, sizeof(int8_t));
+    int8_t *highByte = calloc(1, sizeof(int8_t));
+    read_register_raw(REG_GYRO_X_H, highByte, 1);
+    read_register_raw(REG_GYRO_X_L, lowByte, 1);
+    output[0] =(*highByte << 8) & *lowByte;
+    read_register_raw(REG_GYRO_X_H, highByte, 1);
+    read_register_raw(REG_GYRO_X_L, lowByte, 1);
+    output[1] =(*highByte << 8) & *lowByte;
+    read_register_raw(REG_GYRO_X_H, highByte, 1);
+    read_register_raw(REG_GYRO_X_L, lowByte, 1);
+    output[2] =(*highByte << 8) & *lowByte;
+}
+
+int16_t *read_mag() {
+    int16_t *output = calloc(3, sizeof(int16_t));
+    int8_t *lowByte = calloc(1, sizeof(int8_t));
+    int8_t *highByte = calloc(1, sizeof(int8_t));
+//    read_mag_raw();
+}
+
+/**
+ * Read the whoami register
+ */
+void read_who_am_i(int8_t *output) {
+    i2c_write_blocking(i2c0, ADDRESS, &REG_WHO_AM_I, 1, true);
+    i2c_read_blocking(i2c0, ADDRESS, output, 1, false);
 }
 
 int main() {
-    double *xBuffer = calloc(15, sizeof(double));
-    double *yBuffer = calloc(15, sizeof(double));
-    int bufferNumber = 0;
 
     stdio_init_all();
 
-    X_SCALE_FACTOR = 1.0;
-    Y_SCALE_FACTOR = (double) (X_MAX - X_MIN)/(Y_MAX - Y_MIN);
-
-    X_OFFSET = X_SCALE_FACTOR * ((X_MAX-X_MIN)/2 - X_MAX);
-    Y_OFFSET = Y_SCALE_FACTOR * ((Y_MAX-Y_MIN)/2 - Y_MAX);
-
     // This example will use I2C0 on the default SDA and SCL pins (4, 5 on a Pico)
     i2c_init(i2c0, 400 * 1000);
+    i2c_init(i2c1, 400 * 1000);
     gpio_set_function(SDA_PIN, GPIO_FUNC_I2C);
     gpio_set_function(SCL_PIN, GPIO_FUNC_I2C);
     gpio_pull_up(SDA_PIN);
     gpio_pull_up(SCL_PIN);
+    gpio_set_function(2, GPIO_FUNC_I2C);
+    gpio_set_function(3, GPIO_FUNC_I2C);
+    gpio_pull_up(2);
+    gpio_pull_up(3);
 
-    qmc5883l_init();
-    int xMax = -10000;
-    int xMin = 5000;
-    int yMax = -10000;
-    int yMin = 5000;
-    int zMax = -10000;
-    int zMin = 5000;
-    double x;
-    double y;
-    double z;
-    int16_t *magnitudes;
-    read();
-    sleep_ms(1000);
-    while (1) {
-        magnitudes = read();
-        xBuffer[bufferNumber] = magnitudes[0] * X_SCALE_FACTOR + X_OFFSET;
-        yBuffer[bufferNumber] = magnitudes[1] * Y_SCALE_FACTOR + Y_OFFSET;
-        z = magnitudes[2] * Z_SCALE_FACTOR + Z_OFFSET;
-//        xMax = (x > xMax) ? x : xMax;
-//        xMin = (x < xMin) ? x : xMin;
-//        yMax = (y > yMax) ? y : yMax;
-//        yMin = (y < yMin) ? y : yMin;
-//        zMax = (z > zMax) ? z : zMax;
-//        zMin = (z < zMin) ? z : zMin;
-        x = 0;
-        y = 0;
-        for (int i = 0; i < 15; i++) {
-            x += xBuffer[i];
-            y += yBuffer[i];
-        }
-        y /= 15;
-        x /= 15;
-        //printf("x:%f,xMax:%d,xMin:%d,y:%f,yMax:%d,yMin:%d\n",x,xMax,xMin,y,yMax,yMin);
-        int* heading = malloc(sizeof(int) * 2);
-        calculateHeading(heading, y, x);
-        bufferNumber = (bufferNumber == 15) ? 0 : (bufferNumber + 1);
-        printf("Heading: %d°\n", heading[0]);
-        free(magnitudes);
-        free(heading);
-        sleep_ms(50);
+    while(true) {
+        int8_t output;
+        read_who_am_i(&output);
+        printf("%x\n",output);
+        sleep_ms(1000);
     }
-    return 0;
+
 }
